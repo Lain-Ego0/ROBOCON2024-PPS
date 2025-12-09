@@ -1,3 +1,81 @@
+
+# ROBOCON2024-PPS
+Plane Positioning System (Code Disk) Using Magnetic Encoding + Omni Wheels
+
+## 📍 Project Introduction
+
+**MTIPPS (Plane Positioning)** is an independent planar axis positioning control system developed by the MTI Robot Team, referencing Qingdao University of Technology's open-source design and based on the **STM32F103C8T6** microcontroller.
+
+This system accurately reads the position information of objects in the XY plane through RS485 absolute encoders and sends it to the main control board in real-time via serial port. The system can record the traveled distance in real-time with **millimeter-level (mm) precision**. When installed on a robot chassis, it enables the robot to automatically walk along any path planned on the plane.
+
+## ✨ Hardware and Communication Configuration
+
+| Hardware Module | Interface/Protocol | Function | Notes |
+| :--- | :--- | :--- | :--- |
+| **Microcontroller** | STM32F103C8T6 | Core control and data processing | Controller for domestically independently developed positioning system. |
+| **Positioning Sensor** | RS485 Absolute Encoder | Measure XY axis displacement | Achieve high-precision positioning on the base axis plane. |
+| **Attitude Sensor** | Hi219 Gyroscope | Measure attitude angles (Yaw/Pitch/Roll) | Used for attitude compensation or status monitoring. |
+| **Communication Interface 1** | **USART1** | Read Hi219 gyroscope data | Receive attitude information. |
+| **Communication Interface 2** | **USART2** | **Send data to robot mainboard** | Provide positioning and attitude data to the main control board. |
+| **Communication Interface 3** | **USART3** | Read RS485 absolute encoder | Receive high-precision positioning data. |
+
+## 📜 Version Iteration Record
+
+### V0.1 - Basic Positioning System Architecture Establishment
+
+| Description | Changes | Notes |
+| :--- | :--- | :--- |
+| **Core Function** | Planar base axis positioning | Based on RS485 absolute encoders, realizing XY axis planar positioning. |
+| **Precision** | Millimeter-level distance recording | Capable of recording traveled distance at any time, with **mm-level precision**. |
+| **Application Goal** | Path planning | Enable robot chassis to travel according to path planning, achieving planar automatic walking. |
+| **Communication Configuration** | Initialization configuration | Configure **USART1 (gyroscope)**, **USART2 (send to mainboard)**, **USART3 (RS485 encoder)**. |
+
+### V0.2 - Program Structure Optimization and Gyroscope Adaptation Attempt (240417)
+
+| Description | Changes | Notes |
+| :--- | :--- | :--- |
+| **Modifier** | Lain | Responsible for program optimization and function adaptation of this version. |
+| **Architecture Optimization** | Optimize program structure | Improve code readability and maintainability. |
+| **Gyroscope Adaptation** | Re-integrate gyroscope adaptation | Ensure correct parsing and usage of Hi219 data. |
+| **Data Sending Attempt 1** | Prepare data to be sent in `it.c` | **Attempt Method 1**: In the `prepare_data()` function, assign floating-point data from encoders and gyroscopes to the `remote_states` array. |
+| **Attempt 1 Failure** | Result: Failed | The attempt method failed to achieve effective data sending or receiving. |
+| **Data Sending Attempt 2** | Modify serial port configuration | **Attempt Method 2**: Modify serial port configuration |
+
+#### V0.2 (240417) Data Sending Structure/Array Mapping (Attempt Method 1)
+
+The following is the mapping relationship for V0.2's attempt to prepare data for sending in the `void prepare_data(void)` function:
+
+```c
+void prepare_data(void) {
+    // Assign floating-point data to be sent to the remote_states array
+    memset(remote_states, 0, sizeof(remote_states)); // Clear array content
+
+    // Encoder positioning data
+    remote_states[0] = Positioning.X_laps;        // X-axis laps
+    remote_states[1] = Positioning.X_distance_mm; // X-axis distance (mm)
+    remote_states[2] = Positioning.Y_laps;        // Y-axis laps
+    remote_states[3] = Positioning.Y_distance_mm; // Y-axis distance (mm)
+
+    // Hi219 attitude data (angles)
+    remote_states[4] = P_stHi219m.Yaw;            // Yaw angle
+    remote_states[5] = P_stHi219m.Pitch;          // Pitch angle
+    remote_states[6] = P_stHi219m.Roll;           // Roll angle
+
+    // Hi219 attitude data (angular velocities)
+    remote_states[7] = P_stHi219m.Yaw_Gyo;        // Yaw angular velocity
+    remote_states[8] = P_stHi219m.Pitch_Gyo;      // Pitch angular velocity
+    remote_states[9] = P_stHi219m.Roll_Gyo;       // Roll angular velocity
+
+    // Hi219 attitude data (historical/continuous values)
+    remote_states[10] = P_stHi219m.Last_Yaw;      // Previous Yaw
+    remote_states[11] = P_stHi219m.Last_Pitch;    // Previous Pitch
+    remote_states[12] = P_stHi219m.Last_Roll;     // Previous Roll
+    remote_states[13] = P_stHi219m.Continuous_Pitch; // Continuous Pitch angle
+    remote_states[14] = P_stHi219m.Continuous_Roll;  // Continuous Roll angle
+    remote_states[15] = P_stHi219m.Continuous_Yaw;   // Continuous Yaw angle
+}
+```
+
 # ROBOCON2024-PPS
 使用磁编码+全向轮的平面定位系统（码盘）
 
