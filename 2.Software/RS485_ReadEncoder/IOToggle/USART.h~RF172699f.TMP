@@ -1,0 +1,782 @@
+//@file    USART.h
+#include "stm32f10x_usart.h"
+#include "stmflash.h"
+
+//[地址][波特率][波特率][波特率][模式][时间][时间][零点][零点][精度]
+u8 TEXT_Buffer[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+#define SIZE sizeof(TEXT_Buffer)	 			  	//数组长度
+#define FLASH_SAVE_ADDR1  0X0800F800 				//设置FLASH 保存地址(必须为偶数)
+#define FLASH_SAVE_ADDR2  0X0800F700 				//设置FLASH 保存地址(必须为偶数)
+#define FLASH_SAVE_ADDR3  0X0800F600 				//设置FLASH 保存地址(必须为偶数)
+u8 Canshu_Buffer[SIZE];
+u8 Canshu_Buffer2[SIZE];
+u8 Canshu_Buffer3[SIZE];
+
+
+#define   SET_RE    GPIOA->ODR|=(1<<8);
+#define   RESET_RE  GPIOA->ODR&=~(1<<8);
+	u8 t=0;
+	u32 sensor1=0;
+	u32 sensor11=0;
+	u32 sensor2=0;
+	u32 sensor22=0;
+	u32 sensor3=0;
+	u32 sensor33=0;
+	u8 rs485buf[20];
+	u32 sensor4=0;
+	u32 sensor44=0;
+
+	u32 sensor333=0;//用于转换成4096
+	u32 sensor3333=0;//用于转换成4096
+
+u32 sensorA=0;
+u32 sensorB=0;
+u32 sensorC=0;
+unsigned char ReceiveData=0X0;
+u8 ReceiveData_All[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+u8 SendData_All[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+u8 SendData_All_bin[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+unsigned short int cr2;
+short int SpeedA=0;
+short int SpeedB=0;
+u8 U485_FLAG=0;
+u8 USART1_i=0;
+u8 Receive_Flag=1;
+int Test_Num = 0;
+int ABSNum = 0;//2号编码器的值
+int ABSNum2 = 0;//2号编码器的值
+int ABSNum3 = 0;//2号编码器的值
+int ABSNum4 = 0;//2号编码器的值
+
+float Cdo1 = 0;
+float Cdo2 = 0;
+
+int DO1 = 0;
+int DO2 = 0;
+int ICdo1 = 0;
+
+float Cdo1_Cdo2 = 0;
+float Cdo2_Cdo1 = 0;
+
+
+//int TestNumOK_Now=0;
+//int TestNumOK_Speed=0;
+//int TestNumOK_Last=0;
+//int TestNumOK_Show=0;
+//int TestNumOK=0;
+
+
+//int Q1_Show=0;
+//int Q2_Show=0;
+//int Q3_Show=0;
+//int quanshu_Show=0;
+
+
+int DO2_DO1 = 0;
+int ABSNumLast=0;//编码器的值
+int ABSNumLast2=0;//编码器的值
+int ABSNumOK1=0;
+
+int ABSNumOK_Yudian=0;
+int ABSNumOK_TempOK=0;
+int ABSNumOK_Last_Temp=0;
+
+int ABSNumOK_Last_Max=0;
+int danquan=0;
+char jindu = 0;
+
+
+int ABSNumOK_Now=0;
+int ABSNumOK_Meed=0;
+int ABSNumOK_Last=0;
+int Chazhi = 0;
+int Recorde_Z = 0;//发送编码真值
+int Chazhi_Test1 = 0;
+int Chazhi_Test2 = 0;
+
+int Chazhi_Test3 = 0;
+int Chazhi_Test4 = 0;
+
+//u8 Chazhi_flag = 0;
+u8 Zero_flag = 1;
+int Cheshi_flag = 200;
+
+
+int ABSNum_Test=0;
+
+float ABSNumOK_Temp=0;
+float ABSNumxiao = 0;
+float ABSNumxiao2 = 0;
+u16 angle_tempA =0;
+u16 angle_tempB =0;
+u16 angle_tempC =0;
+u16 angle_tempD =0;
+u16 angle_tempE =0;
+
+u16 angle3_tempA =0;
+u16 angle3_tempB =0;
+u16 angle3_tempC =0;
+u16 angle3_tempD =0;
+u16 angle3_tempE =0;
+
+u16 angle2_tempA =0;
+u16 angle2_tempB =0;
+u16 angle2_tempC =0;
+u16 angle2_tempD =0;
+u16 angle2_tempE =0;
+
+u16 angle4_tempA =0;
+u16 angle4_tempB =0;
+u16 angle4_tempC =0;
+u16 angle4_tempD =0;
+u16 angle4_tempE =0;
+
+u8 NumT = 0;
+u16 tmp_value =0;
+u16 safe_word =0;
+unsigned char crc_ret = 0;
+
+int angle_Binpeng =0;
+int angle2_Binpeng =0;
+int angle3_Binpeng =0;
+int angle4_Binpeng =0;
+
+
+u8 tmp_buf[]={0x00,0x00,0x00,0x00};
+
+
+u16 ReadTempA =0;
+u16 ReadTempB =0;
+u16 ReadTempC =0;
+u16 ReadTempAA =0;
+u16 ReadTempBB =0;
+u16 ReadTempCC =0;
+
+int AddNum = 0;
+int ABSNumNow = 0;
+int AddTime = 0;
+
+
+#include "stdio.h"
+#define UART_RX_LEN 100
+u8 Uart_Send_Buffer[UART_RX_LEN];
+u8 ii=0;
+u8 Flag_Uart_Send=0;
+
+int fputc(int ch, FILE *f)
+{	
+	Uart_Send_Buffer[ii]=((unsigned char) ch);
+	ii++;
+	return (ch);
+}
+
+int GetKey (void) 
+{ 
+	while (!(USART1->SR & USART_FLAG_RXNE));
+	return ((int)(USART1->DR & 0x1FF));
+}
+
+#define SIZE sizeof(TEXT_Buffer)	 			  	//数组长度
+#define FLASH_SAVE_ADDR  0X0800F800 				//设置FLASH 保存地址(必须为偶数)
+
+void USART1_Config(int botelv)
+{
+	USART_InitTypeDef USART_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
+
+	GPIO_InitTypeDef GPIO_InitStructure;
+	RCC_APB2PeriphClockCmd( RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1 , ENABLE);
+
+	USART_InitStructure.USART_BaudRate = botelv;//(datatemp[2] + (datatemp[1] << 8))*100;
+	USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+	USART_InitStructure.USART_StopBits = USART_StopBits_1;
+	USART_InitStructure.USART_Parity = USART_Parity_No;
+	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+
+	USART_Init(USART1, &USART_InitStructure);         //按上面参数配置USART1
+	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);    //使能接收中断
+	USART_Cmd(USART1, ENABLE);						//使能USART1
+
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;	         //USART1 TX
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;    //复用推挽输出
+	GPIO_Init(GPIOA, &GPIO_InitStructure);		       //A端口 
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;	         //USART1 RX
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;   //复用开漏输入
+	GPIO_Init(GPIOA, &GPIO_InitStructure);		            //A端口 
+
+	/* Configure the NVIC Preemption Priority Bits */  
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_0);	  
+	/* Enable the USART1 Interrupt */
+	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure); 
+
+}
+void Dma_Init(void)
+{
+	DMA_InitTypeDef DMA_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;  
+
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1,ENABLE);
+	/*DMAchannel6configuration*/
+	DMA_DeInit(DMA1_Channel1);
+	DMA_InitStructure.DMA_PeripheralBaseAddr=(u32)(&USART1->DR);//外设地址
+	DMA_InitStructure.DMA_MemoryBaseAddr=(u32)Uart_Send_Buffer;
+	DMA_InitStructure.DMA_DIR=DMA_DIR_PeripheralDST;//外设作为目的地址//DMA_DIR_PeripheralSRC;//外设作为DMA的源端
+	DMA_InitStructure.DMA_BufferSize=5;//BufferSize;//传输大小
+	DMA_InitStructure.DMA_PeripheralInc=DMA_PeripheralInc_Disable;//外设递增模式禁止DMA_PeripheralInc_Enable;//外设地址增加
+	DMA_InitStructure.DMA_MemoryInc=DMA_MemoryInc_Enable;//内存地址自增
+	DMA_InitStructure.DMA_PeripheralDataSize=DMA_PeripheralDataSize_Byte;//传输方式：字节DMA_PeripheralDataSize_Word;//字（32位）
+	DMA_InitStructure.DMA_MemoryDataSize=DMA_PeripheralDataSize_Byte;//内存存储方式：字节DMA_MemoryDataSize_Word;
+	DMA_InitStructure.DMA_Mode=DMA_Mode_Normal;//DMA_Mode_Normal正常模式，只传送一次;DMA_Mode_Circular:循环模式，不停的传送;
+	DMA_InitStructure.DMA_Priority=DMA_Priority_High;
+	DMA_InitStructure.DMA_M2M=DMA_M2M_Disable;//DMA_M2M_Enable;
+	DMA_Init(DMA1_Channel4,&DMA_InitStructure);
+
+	/*EnableDMAChannel4TransferCompleteinterrupt*/
+	DMA_ITConfig(DMA1_Channel4,DMA_IT_TC,ENABLE);
+	//
+	//USART_DMACmd(USART1,USART_DMAReq_Rx,ENABLE);//串口接收器DMA
+	//采用DMA方式发送
+	USART_DMACmd(USART1,USART_DMAReq_Tx,ENABLE);
+	//启动串口
+	USART_Cmd(USART1,ENABLE);
+	DMA_Cmd(DMA1_Channel4, ENABLE);
+
+	
+	//传输完成则进入DMA1_Channel4中断；
+
+         
+        
+	 //DMA优先级        
+	 NVIC_PriorityGroupConfig(NVIC_PriorityGroup_3);
+	 NVIC_InitStructure.NVIC_IRQChannel= DMA1_Channel4_IRQn; 
+	 NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority= 2; 
+	 NVIC_InitStructure.NVIC_IRQChannelSubPriority= 1; 
+	 NVIC_InitStructure.NVIC_IRQChannelCmd= ENABLE; 
+	 NVIC_Init(&NVIC_InitStructure);
+}
+
+//串口1  DMA方式发送中断
+void DMA1_Channel4_IRQHandler(void)
+{      
+	//清除标志位
+	DMA_ClearFlag(DMA1_FLAG_TC4); 
+	//关闭DMA 
+	DMA_Cmd(DMA1_Channel4,DISABLE); 
+	Flag_Uart_Send = 0;
+                  
+}
+/*************************校验码计算函数*************************/
+unsigned int Crc_Count(unsigned char pbuf[],unsigned char num)
+{
+   int i,j;
+   unsigned int wcrc=0xffff;
+   for(i=0;i<num;i++)
+   {
+     wcrc^=(unsigned int)(pbuf[i]);
+	 for (j=0;j<8;j++)
+	 {
+	    if(wcrc&0x0001)
+		{
+		   wcrc>>=1;
+		   wcrc^=0xa001;
+		}
+		else
+			wcrc>>=1;
+	 }
+   }   
+   return wcrc;
+}
+
+/**********************************发送函数************************************************************/
+void USART_Transmit(USART_TypeDef* USARTx,u8 *data,int num)	 //发送数组
+{
+	while(num--)
+	{
+		while(USART_GetFlagStatus(USARTx,USART_FLAG_TXE)==RESET);//发送寄存器空
+		USART_SendData(USARTx,*data++);//发送单个数据//USART1->DR=*data++;
+		while(USART_GetFlagStatus(USARTx,USART_FLAG_TC)==RESET);//等待数据帧发送完毕
+	}
+}
+void USART_Transmit1(USART_TypeDef* USARTx,u8 data)//发送一个字节
+{ 
+   while(USART_GetFlagStatus(USARTx,USART_FLAG_TXE)==RESET);//发送寄存器空
+	 USART_SendData(USARTx,data);//发送单个数据//USART1->DR=*data++;
+	 while(USART_GetFlagStatus(USARTx,USART_FLAG_TC)==RESET);//等待数据帧发送完毕
+}
+//TEXT_Buffer[0]=ReceiveData_All[2];
+//STMFLASH_Write(FLASH_SAVE_ADDR,(u16*)TEXT_Buffer,SIZE);
+//STMFLASH_Read(FLASH_SAVE_ADDR,(u16*)datatemp,SIZE);
+//u8 SendData_All[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+void USART1_IRQHandler(void)
+{  
+	unsigned short int cr1;
+  if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)
+	{	
+		ReceiveData = USART_ReceiveData(USART1);
+		for(USART1_i=0;USART1_i<7;USART1_i++)
+	  {
+			ReceiveData_All[USART1_i]=ReceiveData_All[USART1_i+1];
+		}
+		ReceiveData_All[7]=ReceiveData;
+
+			cr1=Crc_Count(ReceiveData_All,6); //计算出校验码
+			
+			if(cr1==(ReceiveData_All[6]+(ReceiveData_All[7]<<8)))
+			{				
+				if(ReceiveData_All[0]==Canshu_Buffer[4])//判断地址码是否正确
+				{
+					switch(ReceiveData_All[1])//判断功能码
+					{
+						case 0x03://读相关寄存器参数
+						{
+							switch(ReceiveData_All[3]+(ReceiveData_All[2]<<8))//判断寄存器地址
+							{
+								case 0x0000://读取编码器值
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=ABSNumOK_Last>>8;
+										SendData_All[4]=ABSNumOK_Last;
+										SET_RE;
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										RESET_RE;
+									}
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x04;
+										SendData_All[3]=ABSNumOK_Last>>24;
+										SendData_All[4]=ABSNumOK_Last>>16;
+										SendData_All[5]=ABSNumOK_Last>>8;
+										SendData_All[6]=ABSNumOK_Last;
+										SET_RE;
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										RESET_RE;
+									}
+								};break;
+								case 0x0001://读取编码器值高两个字节
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=ABSNumOK_Last>>24;
+										SendData_All[4]=ABSNumOK_Last>>16;
+										SET_RE;
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										RESET_RE;
+									}
+								};break;
+								case 0x0002://读取编码器圈数值或者单圈数值
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=(ABSNumOK_Last/danquan)>>8;
+										SendData_All[4]=(ABSNumOK_Last/danquan);
+										SET_RE;
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										RESET_RE;
+									}
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x04;
+										SendData_All[3]=(ABSNumOK_Last/danquan)>>8;
+										SendData_All[4]=(ABSNumOK_Last/danquan);
+										SendData_All[5]=(ABSNumOK_Last%danquan)>>8;
+										SendData_All[6]=(ABSNumOK_Last%danquan);
+										SET_RE;
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										RESET_RE;
+									}
+								};break;
+								case 0x0003://读取编码器单圈数值
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=(ABSNumOK_Last%danquan)>>8;
+										SendData_All[4]=(ABSNumOK_Last%danquan);
+										SET_RE;
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										RESET_RE;
+									}
+								};break;
+								
+								
+								case 0x0088://查询编码器参数
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x04;
+										SendData_All[3]=Canshu_Buffer[10];
+										SendData_All[4]=Canshu_Buffer[6];
+										SendData_All[5]=Canshu_Buffer[13];
+										SendData_All[6]=Canshu_Buffer[9];
+										SET_RE;
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										RESET_RE;
+									}
+								};break;
+								
+								case 0x00AA://读取芯片的真值，做校零处理
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x04;
+										SendData_All[3]=angle_tempC;
+										SendData_All[4]=angle2_tempC;
+										SendData_All[5]=angle3_tempC;
+										SendData_All[6]=angle4_tempC;
+										SET_RE;
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										RESET_RE;
+									}
+								};break;
+								case 0x00BB://内部校零指令
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										Canshu_Buffer[0] = angle2_tempC;
+										Canshu_Buffer[1] = angle2_tempC>>8;//二号编码器原点值
+										Canshu_Buffer[2] = angle_tempC;
+										Canshu_Buffer[3] = angle_tempC>>8;//一号编码器原点值
+										Canshu_Buffer[11] = angle4_tempC;
+										Canshu_Buffer[12] = angle4_tempC>>8;//四号编码器原点值
+										Canshu_Buffer[14] = angle3_tempC;
+										Canshu_Buffer[15] = angle3_tempC>>8;//三号编码器原点值
+
+//										Canshu_Buffer[9] =ABSNumOK1>>24;
+//										Canshu_Buffer[10]=ABSNumOK1>>16;
+//										Canshu_Buffer[11]=ABSNumOK1>>8;
+//										Canshu_Buffer[12]=ABSNumOK1;
+
+										cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+										Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+										STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+										ABSNumOK_TempOK = 0;
+										ABSNumOK_Now = 0;
+										ABSNumOK_Meed = 0;
+										ABSNumOK_Last = 0;
+//										sensorA = sensor11;
+//										sensorB = sensor22;
+//										sensorC = sensor33;
+									}
+								};break;
+								default:break;
+							}
+						};break;
+							
+						case 0x06://写相关寄存器参数
+						{
+							switch(ReceiveData_All[3]+(ReceiveData_All[2]<<8))//判断寄存器地址
+							{
+								case 0x0004://设定编码器地址
+								{
+									Canshu_Buffer[4] = ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+									cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+									Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+									STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+
+									
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x04;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+									SET_RE;
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									USART_Transmit(USART1,SendData_All,8);
+									USART_Transmit(USART1,SendData_All,8);
+									RESET_RE;
+								};break;
+								case 0x0005://设定编码器波特率
+								{
+									Canshu_Buffer[5] = ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+									cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+									Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+									STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+									
+									
+									
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x05;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+									SET_RE;
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									RESET_RE;
+									
+									switch(Canshu_Buffer[5])//波特率
+									{
+										case 0x00:{USART1_Config(9600);};break;
+										case 0x01:{USART1_Config(19200);};break;
+										case 0x02:{USART1_Config(38400);};break;
+										case 0x03:{USART1_Config(57600);};break;
+										case 0x04:{USART1_Config(115200);};break;
+										default:{USART1_Config(9600);};break;
+									}	
+									
+								};break;
+								case 0x0006://设定编码器模式
+								{
+									Canshu_Buffer[6] = ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+									cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+									Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+									STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+									
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x06;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+									SET_RE;
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									RESET_RE;
+								};break;
+								case 0x0007://设定编码器自动返回时间
+								{
+									Canshu_Buffer[7] = ReceiveData_All[4];
+									Canshu_Buffer[8] = ReceiveData_All[5];
+									cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+									Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+									STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+									STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+									
+									
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x07;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+									SET_RE;
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									RESET_RE;
+								};break;
+								case 0x0008://设定编码器零点
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8)) == 1)
+									{
+										
+										Canshu_Buffer[0] = angle2_tempC;
+										Canshu_Buffer[1] = angle2_tempC>>8;//二号编码器原点值
+										Canshu_Buffer[2] = angle_tempC;
+										Canshu_Buffer[3] = angle_tempC>>8;//一号编码器原点值
+										Canshu_Buffer[11] = angle4_tempC;
+										Canshu_Buffer[12] = angle4_tempC>>8;//四号编码器原点值
+										Canshu_Buffer[14] = angle3_tempC;
+										Canshu_Buffer[15] = angle3_tempC>>8;//三号编码器原点值
+
+										cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+										Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+										STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+										
+										
+										
+										
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x08;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+										SET_RE;
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										RESET_RE;
+										
+										ABSNumOK_TempOK = 0;
+										ABSNumOK_Now = 0;
+										ABSNumOK_Meed = 0;
+										ABSNumOK_Last = 0;
+									}
+								};break;
+								case 0x0009://编码器值递增方向
+								{
+										Canshu_Buffer[13]=ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+
+										cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+										Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+										STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+										
+										
+										
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x09;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+										SET_RE;
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										RESET_RE;
+								};break;
+								
+								case 0x0068://编码器精度调整
+								{
+										Canshu_Buffer[9]=ReceiveData_All[5]+(ReceiveData_All[4]<<8)+10;
+										if(Canshu_Buffer[9] == 11)Canshu_Buffer[9] =12;
+									
+										jindu = 12 - Canshu_Buffer[9];
+										if(jindu < 0)jindu = 0;
+										ABSNumOK_Last_Max = 5271552 >> jindu;
+										danquan = 4096 >> jindu;
+
+										cr2=Crc_Count(Canshu_Buffer,16); //计算出校验码
+										Canshu_Buffer[16] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[17] = cr2>>8;//所有存储数据校验CRC低字节
+
+										STMFLASH_Write(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR2,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Write(FLASH_SAVE_ADDR3,(u16*)Canshu_Buffer,SIZE);//分别写入三段地址
+										STMFLASH_Read(FLASH_SAVE_ADDR1,(u16*)Canshu_Buffer,SIZE);
+										
+										
+										
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x68;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+										SET_RE;
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										RESET_RE;
+								};break;
+								
+								default:break;
+							}
+						};break;
+						
+						default:break;
+					}
+				}
+			}
+		USART_ClearFlag(USART1,USART_FLAG_RXNE);
+  }
+	
+	if(USART_GetFlagStatus(USART1, USART_FLAG_ORE) != RESET)
+	{ 
+		ReceiveData = USART_ReceiveData(USART1); 
+		USART_ClearFlag(USART1, USART_FLAG_ORE);
+	}
+
+	if(USART_GetFlagStatus(USART1, USART_FLAG_NE) != RESET)USART_ClearFlag(USART1, USART_FLAG_NE);
+	if(USART_GetFlagStatus(USART1, USART_FLAG_FE) != RESET)USART_ClearFlag(USART1, USART_FLAG_FE);
+	if(USART_GetFlagStatus(USART1, USART_FLAG_PE) != RESET)USART_ClearFlag(USART1, USART_FLAG_PE);
+
+}
+
+//#endif 
+
+
+
+
+

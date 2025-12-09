@@ -1,0 +1,551 @@
+//@file    Timer.h
+#include "interrupt.h"
+#include "ADC.h"
+
+#define LED0_CHG GPIOB->ODR^=(1<<11);
+#define LED0_ON  GPIOB->ODR&=~(1<<11);
+#define LED0_OFF GPIOB->ODR|=(1<<11);
+
+
+#define SPI_FLASH_CS_HIGH GPIOA->ODR|=(1<<3);
+#define SPI_FLASH_CS_LOW  GPIOA->ODR&=~(1<<3);
+
+#define SPI3_FLASH_CS_HIGH GPIOB->ODR|=(1<<12);
+#define SPI3_FLASH_CS_LOW  GPIOB->ODR&=~(1<<12);
+
+#define SPI4_FLASH_CS_HIGH GPIOB->ODR|=(1<<9);
+#define SPI4_FLASH_CS_LOW  GPIOB->ODR&=~(1<<9);
+
+#define SPI2_FLASH_CS_HIGH GPIOB->ODR|=(1<<4);
+#define SPI2_FLASH_CS_LOW  GPIOB->ODR&=~(1<<4);
+
+//#define DIR_H GPIOA->ODR|=(1<<2);
+//#define DIR_L GPIOA->ODR&=~(1<<2);
+
+//#define ENA_H GPIOA->ODR|=(1<<3);
+//#define ENA_L GPIOA->ODR&=~(1<<3);
+
+//定时器TIM3初始化
+void TIM3_Config(void)
+{
+	//设置TIM类型 
+	NVIC_InitTypeDef  NVIC_InitStructure;
+	TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
+	//设置TIM8时钟
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3 , ENABLE);
+//	TIM_DeInit(TIM3);
+	TIM_TimeBaseStructure.TIM_Period=99; //自动重装载寄存器周期的值(计数值)
+	//累计 TIM_Period个频率后产生一个更新或者中断
+	TIM_TimeBaseStructure.TIM_Prescaler= 143; //时钟预分频数例如：时钟频率=72MHZ/(时钟预分频+1)
+	TIM_TimeBaseStructure.TIM_ClockDivision=TIM_CKD_DIV1; //采样分频
+	TIM_TimeBaseStructure.TIM_CounterMode=TIM_CounterMode_Up; //向上计数模式
+	TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure);
+
+	TIM_ClearFlag(TIM3, TIM_FLAG_Update); //清除溢出中断标志
+	//TIM_PrescalerConfig(TIM3,0x8C9F,TIM_PSCReloadMode_Immediate); //时钟分频系数36000，所以定时器时钟为2K
+	//TIM_ARRPreloadConfig(TIM3, DISABLE); //禁止ARR预装载缓冲器
+	TIM_ITConfig(TIM3,TIM_IT_Update,ENABLE);
+	TIM_Cmd(TIM3, ENABLE); //开启时钟
+
+	//******************************************************//
+	//TIM3CH1定时器中断
+	
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
+	NVIC_InitStructure.NVIC_IRQChannel =TIM3_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure);
+	//**********************************************************//
+}
+//int NumAll = 0; 
+
+int UartDMASend_tick = 0;
+int UartDMASend_tick_min = 0;
+int UartDMASend_delay = 0;
+void TIM3_IRQHandler(void)
+{
+	unsigned short int cr1;
+	if ( TIM_GetITStatus(TIM3 , TIM_IT_Update) != RESET )
+	{
+		TIM_ClearITPendingBit(TIM3 , TIM_FLAG_Update);
+		
+		if(Canshu_Buffer[6]==0x01)
+		{
+			UartDMASend_tick++;
+			UartDMASend_delay = (Canshu_Buffer[21] + (Canshu_Buffer[20]<<8))*5-1;
+			
+			switch(Canshu_Buffer[5])
+			{
+				case 0x00:{UartDMASend_tick_min = 59;};break;
+				case 0x01:{UartDMASend_tick_min = 29;};break;
+				case 0x02:{UartDMASend_tick_min = 14;};break;
+				case 0x03:{UartDMASend_tick_min = 9;};break;
+				case 0x04:{UartDMASend_tick_min = 4;};break;
+				default:{UartDMASend_tick_min = 59;}break;
+			}
+			if(UartDMASend_delay <= UartDMASend_tick_min)UartDMASend_delay = UartDMASend_tick_min;
+			if(UartDMASend_tick > UartDMASend_delay)
+			{
+				UartDMASend_tick = 0;
+//				Uart_Send_Buffer[0]=Canshu_Buffer[4];
+//				Uart_Send_Buffer[1]=0x03;
+//				Uart_Send_Buffer[2]=0x04;
+//				Uart_Send_Buffer[3]=ABSNumOK_Last>>24;
+//				Uart_Send_Buffer[4]=ABSNumOK_Last>>16;
+//				Uart_Send_Buffer[5]=ABSNumOK_Last>>8;
+//				Uart_Send_Buffer[6]=ABSNumOK_Last;
+//				
+//				cr1=Crc_Count(Uart_Send_Buffer,7); 
+//				Uart_Send_Buffer[7]=cr1;
+//				Uart_Send_Buffer[8]=cr1>>8;
+
+//				SET_RE;	
+//				DMA_SetCurrDataCounter(DMA1_Channel4,11);
+//				DMA_Cmd(DMA1_Channel4,ENABLE);//DMA传输	
+					SET_RE;
+					SendData_All[0]=Canshu_Buffer[4];
+					SendData_All[1]=0x03;
+					SendData_All[2]=0x04;
+					SendData_All[3]=ABSNumOK_Last>>24;
+					SendData_All[4]=ABSNumOK_Last>>16;
+					SendData_All[5]=ABSNumOK_Last>>8;
+					SendData_All[6]=ABSNumOK_Last;
+					
+					cr1=Crc_Count(SendData_All,7); 
+					SendData_All[7]=cr1;
+					SendData_All[8]=cr1>>8;
+					USART_Transmit_Delay(USART1,SendData_All,9);
+					RESET_RE;				
+			}
+		}
+	}
+}
+
+
+//定时器TIM4初始化
+void TIM4_Config(void)
+{
+	//设置TIM类型 
+	NVIC_InitTypeDef  NVIC_InitStructure;
+	TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
+	//设置TIM8时钟
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM4 , ENABLE);
+//	TIM_DeInit(TIM4);
+	TIM_TimeBaseStructure.TIM_Period=1; //自动重装载寄存器周期的值(计数值)
+	//累计 TIM_Period个频率后产生一个更新或者中断
+	TIM_TimeBaseStructure.TIM_Prescaler= 3599; //时钟预分频数例如：时钟频率=72MHZ/(时钟预分频+1)
+	TIM_TimeBaseStructure.TIM_ClockDivision=TIM_CKD_DIV1; //采样分频
+	TIM_TimeBaseStructure.TIM_CounterMode=TIM_CounterMode_Up; //向上计数模式
+	TIM_TimeBaseInit(TIM4, &TIM_TimeBaseStructure);
+
+	TIM_ClearFlag(TIM4, TIM_FLAG_Update); //清除溢出中断标志
+	//TIM_PrescalerConfig(TIM4,0x8C9F,TIM_PSCReloadMode_Immediate); //时钟分频系数36000，所以定时器时钟为2K
+	//TIM_ARRPreloadConfig(TIM4, DISABLE); //禁止ARR预装载缓冲器
+	TIM_ITConfig(TIM4,TIM_IT_Update,ENABLE);
+	TIM_Cmd(TIM4, ENABLE); //开启时钟
+
+	//******************************************************//
+	//TIM4CH1定时器中断
+	
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
+	NVIC_InitStructure.NVIC_IRQChannel =TIM4_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure);
+	//**********************************************************//
+}
+unsigned short int cr222;
+int UartSend_tick = 0;
+
+
+void TIM4_IRQHandler(void)
+{
+	if ( TIM_GetITStatus(TIM4 , TIM_IT_Update) != RESET )
+	{
+		TIM_ClearITPendingBit(TIM4 , TIM_FLAG_Update);
+		UartSend_tick++;
+		if(UartSend_tick > UartSend_delay)
+		{
+			UartSend_tick = 0;
+			if(Datasend_Flag1)
+			{
+				SET_RE;				
+				USART_Transmit_Delay(USART1,SendData_All,Datasend_Num);
+				RESET_RE;
+				Datasend_Flag1 = 0;	
+				TIM_Cmd(TIM4, DISABLE); //关闭时钟				
+			}		
+			if(Dataset_Flag1)
+			{
+				Dataset_Flag1 = 0;
+				if(baudset_Flag1)
+				{
+					baudset_Flag1 = 0;
+					switch(Canshu_Buffer[5])//波特率
+					{
+						case 0x00:{USART1_Config(9600);UartSend_delay = 60;};break;
+						case 0x01:{USART1_Config(19200);UartSend_delay = 30;};break;
+						case 0x02:{USART1_Config(38400);UartSend_delay = 15;};break;
+						case 0x03:{USART1_Config(57600);UartSend_delay = 10;};break;
+						case 0x04:{USART1_Config(115200);UartSend_delay = 5;};break;
+						default:{USART1_Config(9600);UartSend_delay = 60;};break;
+					}	
+				}
+				AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+				AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+				AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);
+			}
+		}
+	}
+}
+//定时器TIM2初始化
+void TIM2_Config(void)
+{
+	//设置TIM类型 
+	NVIC_InitTypeDef  NVIC_InitStructure;
+	TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
+	//设置TIM8时钟
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2 , ENABLE);
+//	TIM_DeInit(TIM2);
+	TIM_TimeBaseStructure.TIM_Period=359; //自动重装载寄存器周期的值(计数值)
+	//累计 TIM_Period个频率后产生一个更新或者中断
+	TIM_TimeBaseStructure.TIM_Prescaler= 199; //时钟预分频数例如：时钟频率=72MHZ/(时钟预分频+1)
+	TIM_TimeBaseStructure.TIM_ClockDivision=TIM_CKD_DIV1; //采样分频
+	TIM_TimeBaseStructure.TIM_CounterMode=TIM_CounterMode_Up; //向上计数模式
+	TIM_TimeBaseInit(TIM2, &TIM_TimeBaseStructure);
+
+	TIM_ClearFlag(TIM2, TIM_FLAG_Update); //清除溢出中断标志
+	//TIM_PrescalerConfig(TIM2,0x8C9F,TIM_PSCReloadMode_Immediate); //时钟分频系数36000，所以定时器时钟为2K
+	//TIM_ARRPreloadConfig(TIM2, DISABLE); //禁止ARR预装载缓冲器
+	TIM_ITConfig(TIM2,TIM_IT_Update,ENABLE);
+	TIM_Cmd(TIM2, ENABLE); //开启时钟
+
+	//******************************************************//
+	//TIM2CH1定时器中断
+	
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
+	NVIC_InitStructure.NVIC_IRQChannel =TIM2_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure);
+	//**********************************************************//
+}
+int ExSpeedNow = 0;
+int ExSpeedLast = 0;
+int ExSpeedNext = 0;
+int ExpeedAll = 0;
+
+u16 SpeedTim_tick = 0;
+
+
+void TIM2_IRQHandler(void)
+{
+	if ( TIM_GetITStatus(TIM2 , TIM_IT_Update) != RESET )
+	{
+		TIM_ClearITPendingBit(TIM2 , TIM_FLAG_Update);
+		SpeedTim_tick++;
+		
+		if(SpeedTim_tick > (Canshu_Buffer[25] + (Canshu_Buffer[24]<<8)))
+		{
+			ExSpeedNow  = ABSNumOK_Last;
+			ExSpeed_Temp = ExSpeedNow - ExSpeedNext;
+			ExSpeedNext  = ABSNumOK_Last;
+			
+			if(ExSpeed_Temp >= 0){ExSpeed_Send = ExSpeed_Temp;}
+			else{ExSpeed_Send = -ExSpeed_Temp;}
+			
+			SpeedTim_tick = 0;
+		}
+	
+	}
+}
+/*
+函数名：SPI_FLASH_Init(void) 
+功能  ：对端口和SPI初始化 
+输入  ：无 
+输出  ：无 
+调用  ：被主函数调用 */ 
+void SPI2_FLASH_Init(void) 
+{ 
+  SPI_InitTypeDef   SPI_InitStructure;   
+	GPIO_InitTypeDef  GPIO_InitStructure;    
+  /* Enable SPI1 and GPIO clocks */ 
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE); 
+  /*!< SPI_FLASH_SPI Periph clock enable */ 
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);   
+	
+  /*将PA5(CLK)、PA6(MISO)、PA7(MOSI)配置成复用推挽输出 */   
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_13;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_OD;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_14;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; //(输入不需要时钟)
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	/*将PA4(CS)设为推挽输出*/ 
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	/*拉高CS，失能芯片，该语句是宏定义，就是置高PA4*/   
+	SPI_FLASH_CS_HIGH;   /* SPI配置*/ 
+  
+	/*将SPI设为全双工模式*/ 
+  SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;   
+	/*将SPI设为主模式*/ 
+  SPI_InitStructure.SPI_Mode = SPI_Mode_Master; 
+	/*将SPI通信的数据大小设为8位*/ 
+  SPI_InitStructure.SPI_DataSize = SPI_DataSize_16b; 
+	/*将CLK的高电平设为空闲*/ 
+  SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low; 
+	/*设置在第二个时钟沿捕获数据*/ 
+  SPI_InitStructure.SPI_CPHA = SPI_CPHA_2Edge;    
+	/*指定NSS信号由软件管理*/ 
+  SPI_InitStructure.SPI_NSS = SPI_NSS_Soft; 
+	/*SPI_BaudRatePrescaler用来定义波特率预分频的值*/
+  SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_8; 
+	/*SPI_FirstBit指定了数据传输从高位还是低位开始*/   
+	SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB; 
+	/*SPI_CRCPolynomial定义了用于CRC值计算的多项式*/   
+	SPI_InitStructure.SPI_CRCPolynomial = 7;    
+	SPI_Init(SPI2, &SPI_InitStructure);   /* Enable SPI1  */ 
+  SPI_Cmd(SPI2, ENABLE); 
+}
+/******************************************************************************* 
+* Function Name  : SPI_FLASH_SendByte 
+* Description    : 通过SPI总线发送一字节数据，再通过SPI总线返回
+一字节数据 
+* Input          : byte ——要发送的数据 * Output         : 从机返回的数据 
+* 调用           ：被SPI_FLASH_ReadDeviceID调用 
+*******************************************************************************/ 
+u16 SPI2_FLASH_SendByte(u16 byte) 
+{ 
+	/* 等待SPI发送寄存器里的数据发送结束 */ 
+	while(SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_TXE) == RESET);   
+	/* 发送数据*/ 
+	SPI_I2S_SendData(SPI2, byte);    
+	/* 等待接收完一字节数据 */ 
+	while (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_RXNE) == RESET);   
+	/* 返回接收到的数据 */ 
+	return  SPI_I2S_ReceiveData(SPI2); 
+}
+
+/*
+函数名：SPI_FLASH_Init(void) 
+功能  ：对端口和SPI初始化 
+输入  ：无 
+输出  ：无 
+调用  ：被主函数调用 */ 
+void SPI_FLASH_Init(void) 
+{ 
+  SPI_InitTypeDef   SPI_InitStructure;   
+	GPIO_InitTypeDef  GPIO_InitStructure;    
+  /* Enable SPI1 and GPIO clocks */ 
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE); 
+  /*!< SPI_FLASH_SPI Periph clock enable */ 
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);   
+	
+  /*将PA5(CLK)、PA6(MISO)、PA7(MOSI)配置成复用推挽输出 */   
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_7;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_OD;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; //(输入不需要时钟)
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+	
+	/*将PA4(CS)设为推挽输出*/ 
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+	
+	/*拉高CS，失能芯片，该语句是宏定义，就是置高PA4*/   
+	SPI_FLASH_CS_HIGH;   /* SPI配置*/ 
+  
+	/*将SPI设为全双工模式*/ 
+  SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;   
+	/*将SPI设为主模式*/ 
+  SPI_InitStructure.SPI_Mode = SPI_Mode_Master; 
+	/*将SPI通信的数据大小设为8位*/ 
+  SPI_InitStructure.SPI_DataSize = SPI_DataSize_16b; 
+	/*将CLK的高电平设为空闲*/ 
+  SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low; 
+	/*设置在第二个时钟沿捕获数据*/ 
+  SPI_InitStructure.SPI_CPHA = SPI_CPHA_2Edge;    
+	/*指定NSS信号由软件管理*/ 
+  SPI_InitStructure.SPI_NSS = SPI_NSS_Soft; 
+	/*SPI_BaudRatePrescaler用来定义波特率预分频的值*/
+  SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_8; 
+	/*SPI_FirstBit指定了数据传输从高位还是低位开始*/   
+	SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB; 
+	/*SPI_CRCPolynomial定义了用于CRC值计算的多项式*/   
+	SPI_InitStructure.SPI_CRCPolynomial = 7;    
+	SPI_Init(SPI1, &SPI_InitStructure);   /* Enable SPI1  */ 
+  SPI_Cmd(SPI1, ENABLE); 
+}
+/******************************************************************************* 
+* Function Name  : SPI_FLASH_SendByte 
+* Description    : 通过SPI总线发送一字节数据，再通过SPI总线返回
+一字节数据 
+* Input          : byte ——要发送的数据 * Output         : 从机返回的数据 
+* 调用           ：被SPI_FLASH_ReadDeviceID调用 
+*******************************************************************************/ 
+u16 SPI_FLASH_SendByte(u16 byte) 
+{ 
+	/* 等待SPI发送寄存器里的数据发送结束 */ 
+	while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE) == RESET);   
+	/* 发送数据*/ 
+	SPI_I2S_SendData(SPI1, byte);    
+	/* 等待接收完一字节数据 */ 
+	while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == RESET);   
+	/* 返回接收到的数据 */ 
+	return  SPI_I2S_ReceiveData(SPI1); 
+}
+
+
+/*
+函数名：SPI_FLASH_Init(void) 
+功能  ：对端口和SPI初始化 
+输入  ：无 
+输出  ：无 
+调用  ：被主函数调用 */ 
+//void SPI3_FLASH_Init(void) 
+//{ 
+//  SPI_InitTypeDef   SPI_InitStructure;   
+//	GPIO_InitTypeDef  GPIO_InitStructure;    
+//  /* Enable SPI1 and GPIO clocks */ 
+//  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE); 
+//  /*!< SPI_FLASH_SPI Periph clock enable */ 
+//  RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI3, ENABLE);   
+//	
+//  /*将PA5(CLK)、PA6(MISO)、PA7(MOSI)配置成复用推挽输出 */   
+//  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+//  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+//  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+//  GPIO_Init(GPIOB, &GPIO_InitStructure);
+//	
+//	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_5;
+//  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+//  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_OD;
+//  GPIO_Init(GPIOB, &GPIO_InitStructure);
+//	
+//	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
+//	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+//	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; //(输入不需要时钟)
+//	GPIO_Init(GPIOB, &GPIO_InitStructure);
+//	
+//	/*将PA4(CS)设为推挽输出*/ 
+//  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15;
+//  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+//  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+//  GPIO_Init(GPIOA, &GPIO_InitStructure);
+//	
+//	/*拉高CS，失能芯片，该语句是宏定义，就是置高PA4*/   
+//	SPI_FLASH_CS_HIGH;   /* SPI配置*/ 
+//  
+//	/*将SPI设为全双工模式*/ 
+//  SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;   
+//	/*将SPI设为主模式*/ 
+//  SPI_InitStructure.SPI_Mode = SPI_Mode_Master; 
+//	/*将SPI通信的数据大小设为8位*/ 
+//  SPI_InitStructure.SPI_DataSize = SPI_DataSize_16b; 
+//	/*将CLK的高电平设为空闲*/ 
+//  SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low; 
+//	/*设置在第二个时钟沿捕获数据*/ 
+//  SPI_InitStructure.SPI_CPHA = SPI_CPHA_2Edge;    
+//	/*指定NSS信号由软件管理*/ 
+//  SPI_InitStructure.SPI_NSS = SPI_NSS_Soft; 
+//	/*SPI_BaudRatePrescaler用来定义波特率预分频的值*/
+//  SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_8; 
+//	/*SPI_FirstBit指定了数据传输从高位还是低位开始*/   
+//	SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB; 
+//	/*SPI_CRCPolynomial定义了用于CRC值计算的多项式*/   
+//	SPI_InitStructure.SPI_CRCPolynomial = 7;    
+//	SPI_Init(SPI3, &SPI_InitStructure);   /* Enable SPI1  */ 
+//  SPI_Cmd(SPI3, ENABLE); 
+//}
+/******************************************************************************* 
+* Function Name  : SPI_FLASH_SendByte 
+* Description    : 通过SPI总线发送一字节数据，再通过SPI总线返回
+一字节数据 
+* Input          : byte ——要发送的数据 * Output         : 从机返回的数据 
+* 调用           ：被SPI_FLASH_ReadDeviceID调用 
+*******************************************************************************/ 
+//u16 SPI3_FLASH_SendByte(u16 byte) 
+//{ 
+//	/* 等待SPI发送寄存器里的数据发送结束 */ 
+//	while(SPI_I2S_GetFlagStatus(SPI3, SPI_I2S_FLAG_TXE) == RESET);   
+//	/* 发送数据*/ 
+//	SPI_I2S_SendData(SPI3, byte);    
+//	/* 等待接收完一字节数据 */ 
+//	while (SPI_I2S_GetFlagStatus(SPI3, SPI_I2S_FLAG_RXNE) == RESET);   
+//	/* 返回接收到的数据 */ 
+//	return  SPI_I2S_ReceiveData(SPI3); 
+//}
+
+void GPIO_Configuration(void)
+{
+  GPIO_InitTypeDef GPIO_InitStructure;
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE); 	
+	
+  GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_0 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_8;				     //LED1
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_4;				     //LED1
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+//	GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_0;				     //LED1
+//  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+//  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+//  GPIO_Init(GPIOB, &GPIO_InitStructure);
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; //(输入不需要时钟)
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_11;				     //LED1
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_9;				     //LED1
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; //(输入不需要时钟)
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+	
+	
+	
+  //关闭JATA，使能PA15、PB3、PB4
+  GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+
+ }
+

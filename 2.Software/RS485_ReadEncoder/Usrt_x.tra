@@ -1,0 +1,33 @@
+*** Creating Trace Output File 'Usrt_x.tra' Ok.
+### Preparing for ADS-LD.
+### Creating ADS-LD Command Line
+### List of Objects: adding '"main.o"'
+### List of Objects: adding '"stm32f10x_it.o"'
+### List of Objects: adding '"stm32f10x_gpio.o"'
+### List of Objects: adding '"stm32f10x_rcc.o"'
+### List of Objects: adding '"stm32f10x_tim.o"'
+### List of Objects: adding '"stm32f10x_usart.o"'
+### List of Objects: adding '"stm32f10x_exti.o"'
+### List of Objects: adding '"misc.o"'
+### List of Objects: adding '"stm32f10x_can.o"'
+### List of Objects: adding '"stm32f10x_adc.o"'
+### List of Objects: adding '"stm32f10x_dma.o"'
+### List of Objects: adding '"core_cm3.o"'
+### List of Objects: adding '"system_stm32f10x.o"'
+### List of Objects: adding '"startup_stm32f10x_md.o"'
+### ADS-LD Command completed:
+--cpu Cortex-M3 "main.o" "stm32f10x_it.o" "stm32f10x_gpio.o" "stm32f10x_rcc.o" "stm32f10x_tim.o" "stm32f10x_usart.o" "stm32f10x_exti.o" "misc.o" "stm32f10x_can.o" "stm32f10x_adc.o" "stm32f10x_dma.o" "core_cm3.o" "system_stm32f10x.o" "startup_stm32f10x_md.o" 
+--strict --scatter "Usrt_x.sct" 
+--summary_stderr --info summarysizes --map --xref --callgraph --symbols 
+--info sizes --info totals --info unused --info veneers 
+ --list ".\Usrt_x.map" -o Usrt_x.axf### Preparing Environment (PrepEnvAds)
+### ADS-LD Output File: 'Usrt_x.axf'
+### ADS-LD Command File: 'Usrt_x.lnp'
+### Checking for dirty Components...
+### Creating CmdFile 'Usrt_x.lnp', Handle=0x000003B8
+### Writing '.lnp' file
+### ADS-LD Command file 'Usrt_x.lnp' is ready.
+### ADS-LD: About to start ADS-LD Thread.
+### ADS-LD: executed with 0 errors
+### Updating obj list
+### LDADS_file() completed.

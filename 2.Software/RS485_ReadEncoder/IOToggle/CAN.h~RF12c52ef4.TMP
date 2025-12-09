@@ -1,0 +1,509 @@
+//@file    CAN.h
+#include "Timer.h"
+#include "myiic.h"
+#include "delay.h"
+#include "sys.h" 
+#include "24cxx.h"
+
+CanRxMsg RxMessage;
+CanTxMsg TxMessage;
+
+
+//初始化独立看门狗
+//prer:分频数:0~7(只有低3位有效!)
+//分频因子=4*2^prer.但最大值只能是256!
+//rlr:重装载寄存器值:低11位有效.
+//时间计算(大概):Tout=((4*2^prer)*rlr)/40 (ms).
+void IWDG_Init(u8 prer,u16 rlr) 
+{	
+ 	IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);  //使能对寄存器IWDG_PR和IWDG_RLR的写操作
+	
+	IWDG_SetPrescaler(prer);  //设置IWDG预分频值:设置IWDG预分频值为64
+	
+	IWDG_SetReload(rlr);  //设置IWDG重装载值
+	
+	IWDG_ReloadCounter();  //按照IWDG重装载寄存器的值重装载IWDG计数器
+	
+	IWDG_Enable();  //使能IWDG
+}
+//喂独立看门狗
+void IWDG_Feed(void)
+{   
+ 	IWDG_ReloadCounter();//reload										   
+}
+
+
+//static __IO uint32_t TimingDelay;
+
+//void Delayms(__IO uint32_t nCount)
+//{
+//  for(; nCount != 0; nCount--);
+//}
+//void Delay(__IO uint32_t nTime)
+//{ 
+//  TimingDelay = nTime;
+
+//  while(TimingDelay != 0);
+//}
+//void TimingDelay_Decrement(void)
+//{
+//  if (TimingDelay != 0x00)
+//  { 
+//    TimingDelay--;
+//  }
+//}
+
+//void SysTick_Handler(void)
+//{
+//  TimingDelay_Decrement();
+//}
+
+uint8_t TransmitMailbox = 0;
+//查询发送
+void CAN_SendData(u8 LEN,u8 ADR,u8 x,u32 n)
+{
+  TxMessage.StdId = ADR;
+  TxMessage.ExtId = ADR;
+  TxMessage.RTR = CAN_RTR_DATA;//传输消息的帧类型
+  TxMessage.IDE = CAN_ID_STD;//消息标识符的类型 //CAN_ID_STD//CAN_ID_EXT
+  TxMessage.DLC = LEN;         //消息的帧长度
+		
+  TxMessage.Data[0]=LEN;
+  TxMessage.Data[1]=ADR;
+	TxMessage.Data[2]=x;
+	TxMessage.Data[3]=n;
+	TxMessage.Data[4]=n>>8;
+  TxMessage.Data[5]=n>>16;
+	TxMessage.Data[6]=n>>24;
+	TxMessage.Data[7]=0;
+
+  TransmitMailbox=CAN_Transmit(CAN1, &TxMessage);	//传输数据
+
+}
+
+
+//void Test_CAN_SendData(u8 LEN,u8 ADR,u8 x,u16 n)
+//{
+//  TxMessage.StdId = 0x01;
+//  TxMessage.ExtId = 0x01;
+//  TxMessage.RTR = CAN_RTR_DATA;//传输消息的帧类型
+//  TxMessage.IDE = CAN_ID_STD;//消息标识符的类型 //CAN_ID_STD//CAN_ID_EXT
+//  TxMessage.DLC = LEN;         //消息的帧长度
+//		
+//  TxMessage.Data[0]=LEN;
+//  TxMessage.Data[1]=ADR;
+//	TxMessage.Data[2]=x;
+//	TxMessage.Data[3]=n;
+//	TxMessage.Data[4]=n>>8;
+//  TxMessage.Data[5]=n>>16;
+////	TxMessage.Data[6]=Canshu_Buffer[6];
+////	TxMessage.Data[7]=Canshu_Buffer[7];
+
+//  TransmitMailbox=CAN_Transmit(CAN1, &TxMessage);	//传输数据
+
+//}
+
+
+
+void CAN_Config(void)
+{
+  GPIO_InitTypeDef  GPIO_InitStructure;
+  CAN_InitTypeDef        CAN_InitStructure;
+  CAN_FilterInitTypeDef  CAN_FilterInitStructure;
+  NVIC_InitTypeDef  NVIC_InitStructure;
+
+  /* GPIO clock enable */
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+
+  /* Configure CAN pin: RX */
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+  //GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  
+  /* Configure CAN pin: TX */
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  
+//  GPIO_PinRemapConfig(GPIO_Remap1_CAN1 , ENABLE);
+
+  
+  /* CANx Periph clock enable */
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_CAN1, ENABLE);
+
+  
+  
+  /* CAN register init */
+  CAN_DeInit(CAN1);
+  CAN_StructInit(&CAN_InitStructure);
+
+  /* CAN cell init */
+  CAN_InitStructure.CAN_TTCM = DISABLE;
+  CAN_InitStructure.CAN_ABOM = ENABLE;
+  CAN_InitStructure.CAN_AWUM = DISABLE;
+  CAN_InitStructure.CAN_NART = DISABLE;
+  CAN_InitStructure.CAN_RFLM = DISABLE;
+  CAN_InitStructure.CAN_TXFP = DISABLE;
+  CAN_InitStructure.CAN_Mode = CAN_Mode_Normal;
+  
+  /* CAN Baudrate = 1MBps*/
+  CAN_InitStructure.CAN_SJW = CAN_SJW_1tq; 
+	
+	switch(Canshu_Buffer[5])
+	{
+		case 0x01:CAN_InitStructure.CAN_BS1 = CAN_BS1_8tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_3tq;CAN_InitStructure.CAN_Prescaler = 3;break;//1M
+		case 0x00:CAN_InitStructure.CAN_BS1 = CAN_BS1_6tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_1tq;CAN_InitStructure.CAN_Prescaler = 9;break;//500K
+		case 0x02:CAN_InitStructure.CAN_BS1 = CAN_BS1_6tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_1tq;CAN_InitStructure.CAN_Prescaler = 18;break;//250K
+		case 0x03:CAN_InitStructure.CAN_BS1 = CAN_BS1_6tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_1tq;CAN_InitStructure.CAN_Prescaler = 36;break;//125K
+		case 0x04:CAN_InitStructure.CAN_BS1 = CAN_BS1_6tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_1tq;CAN_InitStructure.CAN_Prescaler = 45;break;//100K
+		case 0x05:CAN_InitStructure.CAN_BS1 = CAN_BS1_6tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_1tq;CAN_InitStructure.CAN_Prescaler = 90;break;//50K
+		case 0x06:CAN_InitStructure.CAN_BS1 = CAN_BS1_6tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_1tq;CAN_InitStructure.CAN_Prescaler = 225;break;//20K
+																					   
+		default:CAN_InitStructure.CAN_BS1 = CAN_BS1_6tq;CAN_InitStructure.CAN_BS2 = CAN_BS2_1tq;CAN_InitStructure.CAN_Prescaler = 9;
+	}
+  
+  CAN_Init(CAN1, &CAN_InitStructure);
+	//CANbps= Fpclk/((BRP+1)*((Tseg1+1)+(Tseg2+1)+1)    
+  //CANbps=30000000/4/(8+6+1))=500k bps  
+	//CANbps=30000000/4/(5+3+1))=500k bps
+
+
+  /* CAN filter init */
+  CAN_FilterInitStructure.CAN_FilterNumber = 0;
+  CAN_FilterInitStructure.CAN_FilterMode = CAN_FilterMode_IdMask;
+  CAN_FilterInitStructure.CAN_FilterScale = CAN_FilterScale_32bit;
+  CAN_FilterInitStructure.CAN_FilterIdHigh = 0x0000;
+  CAN_FilterInitStructure.CAN_FilterIdLow = 0x0000;
+  CAN_FilterInitStructure.CAN_FilterMaskIdHigh = 0x0000;
+  CAN_FilterInitStructure.CAN_FilterMaskIdLow = 0x0000;
+  CAN_FilterInitStructure.CAN_FilterFIFOAssignment = CAN_FIFO0;
+  CAN_FilterInitStructure.CAN_FilterActivation = ENABLE;
+  CAN_FilterInit(&CAN_FilterInitStructure);
+  
+  CAN_ITConfig(CAN1,CAN_IT_FMP0, ENABLE);
+  CAN_ITConfig(CAN1,CAN_IT_ERR, DISABLE);
+  /* Enable CAN1 RX0 interrupt IRQ channel */
+  NVIC_InitStructure.NVIC_IRQChannel = USB_LP_CAN1_RX0_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStructure);
+
+}
+
+
+void USB_LP_CAN1_RX0_IRQHandler(void)
+{
+  CAN_Receive(CAN1, CAN_FIFO0, &RxMessage);
+	if ((RxMessage.StdId == 0xFE)&&(RxMessage.IDE == CAN_ID_STD))
+  {
+		if(RxMessage.Data[1] == 0xFE)//增加万能地址码0XFE
+		{
+			CAN_SendData(7,Canshu_Buffer[4],0x01,quansu_max+(Canshu_Buffer[9]<<16));
+		}
+	}
+	if ((RxMessage.StdId == Canshu_Buffer[4])&&(RxMessage.IDE == CAN_ID_STD))
+  {
+	if(RxMessage.Data[1] == Canshu_Buffer[4])//判断地址码是否正确
+		{
+			switch(RxMessage.Data[2])//判断功能码
+			{
+				case 0x01://读编码器值
+				{							
+					CAN_SendData(7,Canshu_Buffer[4],0x01,ABSNumOK_Last);
+
+				};break;
+				
+				case 0x20://读取编码器速度值（不带符号）
+				{							
+					CAN_SendData(7,Canshu_Buffer[4],0x20,ExSpeed_Send);
+
+				};break;
+				case 0x21://读取编码器速度值（带符号）
+				{							
+					CAN_SendData(7,Canshu_Buffer[4],0x21,ExSpeed_Temp);
+
+				};break;
+
+				case 0x02://写编码器地址
+				{
+					Canshu_Buffer[4]=RxMessage.Data[3];
+					cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+					Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+					Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+					AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+					
+					CAN_SendData(4,Canshu_Buffer[4],0x02,0);
+					AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+					AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);	
+
+				};break;	
+				case 0x03://写波特率
+				{
+						Canshu_Buffer[5]=RxMessage.Data[3];
+						cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+						Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+						Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+						AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+						CAN_SendData(4,Canshu_Buffer[4],0x03,0);	
+						AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+						AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);							
+
+				};break;	
+				case 0x04://写模式
+				{
+						Canshu_Buffer[6]=RxMessage.Data[3];
+						cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+						AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+						CAN_SendData(4,Canshu_Buffer[4],0x04,0);	
+						AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+						AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);							
+
+				};break;
+					case 0x05://自动回传时间
+					{
+							Canshu_Buffer[8] = RxMessage.Data[3];
+							Canshu_Buffer[7] = RxMessage.Data[4];
+							cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+							AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+							CAN_SendData(4,Canshu_Buffer[4],0x05,0);
+							AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+							AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);	
+					};break;
+					
+					case 0x06://设置当前值为零点
+					{
+							DRVdata_temp = 0;
+							if(DRVdata_temp <= 0) DRVdata_temp = 0;
+							DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+							
+							if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+							else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+
+							else{DRVdata = DRVdata;}
+							
+							Canshu_Buffer[16] = DRVdata >> 24;
+							Canshu_Buffer[17] = DRVdata >> 16;
+							Canshu_Buffer[18] = DRVdata >> 8;
+							Canshu_Buffer[19] = DRVdata;
+
+							cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+							AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+							
+							CAN_SendData(4,Canshu_Buffer[4],0x06,0);
+							AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+							AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);	
+
+							
+					};break;
+					
+					
+					case 0x07://编码器值递增方向
+					{
+							Canshu_Buffer[13]=RxMessage.Data[3];
+
+							cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+							AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+							
+							CAN_SendData(4,Canshu_Buffer[4],0x07,0);
+							AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+							AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);	
+	
+					};break;
+					
+					case 0x0A://设定编码器角速度采样时间
+					{
+						Canshu_Buffer[24] = RxMessage.Data[3];
+						Canshu_Buffer[25] = RxMessage.Data[4];
+						cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+						Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+						Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+						AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+						CAN_SendData(4,Canshu_Buffer[4],0x0A,0);
+						AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+						AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);			
+						
+					}
+								
+								
+					case 0x0C://设置编码器中点
+					{
+						
+						DRVdata_temp = ABSNumOK_Last_Max/2;
+							if(DRVdata_temp <= 0) DRVdata_temp = 0;
+							DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+							
+							if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+							else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+
+							else{DRVdata = DRVdata;}
+							
+							Canshu_Buffer[16] = DRVdata >> 24;
+							Canshu_Buffer[17] = DRVdata >> 16;
+							Canshu_Buffer[18] = DRVdata >> 8;
+							Canshu_Buffer[19] = DRVdata;
+
+							cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+
+
+							AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+							
+							CAN_SendData(4,Canshu_Buffer[4],0x0C,0);
+							AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+							AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);	
+	
+					};break;
+					
+					case 0x0D://设置编码器当前位置值
+					{
+						
+							DRVdata_temp = RxMessage.Data[6] + (RxMessage.Data[5]<<8) 
+													+ (RxMessage.Data[4]<<16) + (RxMessage.Data[3]<<24);
+							if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+							if(DRVdata_temp <= 0) DRVdata_temp = 0;
+							DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+							
+							if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+							else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+
+							else{DRVdata = DRVdata;}
+							
+							Canshu_Buffer[16] = DRVdata >> 24;
+							Canshu_Buffer[17] = DRVdata >> 16;
+							Canshu_Buffer[18] = DRVdata >> 8;
+							Canshu_Buffer[19] = DRVdata;
+
+							cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+
+
+							AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+							
+							CAN_SendData(4,Canshu_Buffer[4],0x0D,0);
+							AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+							AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);	
+	
+					};break;
+					
+					case 0x000F://设定编码器值5圈值
+					{
+							DRVdata_temp = 5*danquan;
+							if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+							if(DRVdata_temp <= 0) DRVdata_temp = 0;
+							DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+							
+							if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+							else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+
+							else{DRVdata = DRVdata;}
+							
+							Canshu_Buffer[16] = DRVdata >> 24;
+							Canshu_Buffer[17] = DRVdata >> 16;
+							Canshu_Buffer[18] = DRVdata >> 8;
+							Canshu_Buffer[19] = DRVdata;
+
+							cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+							
+							AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+							
+							CAN_SendData(4,Canshu_Buffer[4],0x0F,0);
+							AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+							AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);
+					};break;
+					
+					
+					
+					case 0x88://读取芯片的真值，做校零处理
+					{
+						TxMessage.StdId = 0x01;
+						TxMessage.ExtId = 0x01;
+						TxMessage.RTR = CAN_RTR_DATA;//传输消息的帧类型
+						TxMessage.IDE = CAN_ID_STD;//消息标识符的类型 //CAN_ID_STD//CAN_ID_EXT
+						TxMessage.DLC = 7;         //消息的帧长度
+							
+						TxMessage.Data[0]=7;
+						TxMessage.Data[1]=Canshu_Buffer[4];
+						TxMessage.Data[2]=0x01;
+						TxMessage.Data[3]=angle_tempC;
+						TxMessage.Data[4]=angle2_tempC;
+						TxMessage.Data[5]=angle3_tempC;
+						TxMessage.Data[6]=angle4_tempC;
+					//	TxMessage.Data[7]=Canshu_Buffer[7];
+
+						TransmitMailbox=CAN_Transmit(CAN1, &TxMessage);	//传输数据
+						
+					};break;
+					
+					case 0x00BB://内部校零指令
+					{
+						
+							Canshu_Buffer[0] = angle2_tempC;
+							Canshu_Buffer[1] = angle2_tempC>>8;//二号编码器原点值
+							Canshu_Buffer[2] = angle_tempC;
+							Canshu_Buffer[3] = angle_tempC>>8;//一号编码器原点值
+							Canshu_Buffer[11] = angle4_tempC;
+							Canshu_Buffer[12] = angle4_tempC>>8;//四号编码器原点值
+							Canshu_Buffer[14] = angle3_tempC;
+							Canshu_Buffer[15] = angle3_tempC>>8;//三号编码器原点值
+							
+							Canshu_Buffer[16] = 0;
+							Canshu_Buffer[17] = 0;
+							Canshu_Buffer[18] = 0;
+							Canshu_Buffer[19] = 0;
+
+							cr2=Crc_Count(Canshu_Buffer,27); //计算出校验码
+									Canshu_Buffer[27] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[28] = cr2>>8;//所有存储数据校验CRC低字节
+
+							AT24CXX_Write(0,(u8*)Canshu_Buffer,SIZE);
+							
+							CAN_SendData(4,Canshu_Buffer[4],0xBB,0);
+							AT24CXX_Write(60,(u8*)Canshu_Buffer,SIZE);
+							AT24CXX_Write(90,(u8*)Canshu_Buffer,SIZE);	
+						
+							ABSNumOK_TempOK = 0;
+							ABSNumOK_Now = 0;
+							ABSNumOK_Meed = 0;
+							ABSNumOK_Last = 0;	
+						
+					};break;
+
+					case 0x68://写精度
+					{
+							Canshu_Buffer[9] = RxMessage.Data[3];
+							STMFLASH_Write(FLASH_SAVE_ADDR,(u16*)Canshu_Buffer,SIZE);
+							STMFLASH_Read(FLASH_SAVE_ADDR,(u16*)Canshu_Buffer,SIZE);	
+							CAN_SendData(4,Canshu_Buffer[0],0x68,0);						
+
+					};break;
+				default:break;
+			}
+		}
+  }
+}
+

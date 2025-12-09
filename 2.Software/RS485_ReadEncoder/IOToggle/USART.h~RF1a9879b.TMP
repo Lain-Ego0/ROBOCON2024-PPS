@@ -1,0 +1,1015 @@
+//@file    USART.h
+#include "stm32f10x_usart.h"
+#include "stdio.h"
+#include "stmflash.h"
+#include "myiic.h"
+#include "delay.h"
+#include "sys.h" 
+#include "24cxx.h"
+#include "encoderdata.h"
+//[地址][波特率][波特率][波特率][模式][时间][时间][零点][零点][精度]
+u8 TEXT_Buffer[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+#define SIZE sizeof(TEXT_Buffer)	 			  	//数组长度
+#define FLASH_SAVE_ADDR1  0X0800F800 				//设置FLASH 保存地址(必须为偶数)
+#define FLASH_SAVE_ADDR2  0X0800F700 				//设置FLASH 保存地址(必须为偶数)
+#define FLASH_SAVE_ADDR3  0X0800F600 				//设置FLASH 保存地址(必须为偶数)
+u8 Canshu_Buffer[SIZE];
+
+u8 Canshu_Buffer_flash[2];
+
+u8 Canshu_Buffer_flashR[]={0xAA,0x55};
+
+//u8 Canshu_Buffer2[SIZE];
+//u8 Canshu_Buffer3[SIZE];
+
+
+u8 Canshu_Buffer_EEROM[10];//[下载][校验][黄线][地址][波特率][校验1][校验2]
+
+u8 Rest_Flag = 0;
+u8 DataRest_Flag = 0;
+
+
+#define   SET_RE    GPIOA->ODR|=(1<<8);
+#define   RESET_RE  GPIOA->ODR&=~(1<<8);
+
+
+
+unsigned char ReceiveData=0X0;
+unsigned char ReceiveData_All_13[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+unsigned char ReceiveData_All[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+u8 SendData_All[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+u8 SendData_All_bin[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+unsigned short int cr2;
+short int SpeedA=0;
+short int SpeedB=0;
+u8 U485_FLAG=0;
+u8 USART1_i=0;
+u8 Receive_Flag=1;
+
+int ABSNum = 0;//2号编码器的值
+
+
+
+int TestNumOK_Now=0;
+int TestNumOK_Speed=0;
+int TestNumOK_Last=0;
+int TestNumOK_Show=0;
+int TestNumOK=0;
+
+
+int Q1_Show=0;
+int Q2_Show=0;
+int Q3_Show=0;
+int quanshu_Show=0;
+int time_show = 0;
+
+
+
+int ABSNumLast=0;//编码器的值
+
+int ABSNumOK_TempOK=0;
+int ABSNumOK_Last_Temp=0;
+
+int ABSNumOK_Last_Max=0;
+int danquan=0;
+short int jindu = 0;
+
+
+int ABSNumOK_Now=0;
+int ABSNumOK_Meed=0;
+int ABSNumOK_Last=0;
+
+int ABSNumOK_Now_Set=0;
+int ABSNumOK_Now_DEV=0;
+
+
+u16 angle_tempA =0;
+u16 angle_tempB =0;
+u16 angle_tempC =0;
+u16 angle_tempD =0;
+u16 angle_tempE =0;
+
+u16 angle3_tempA =0;
+u16 angle3_tempB =0;
+u16 angle3_tempC =0;
+u16 angle3_tempD =0;
+u16 angle3_tempE =0;
+
+u16 angle2_tempA =0;
+u16 angle2_tempB =0;
+u16 angle2_tempC =0;
+u16 angle2_tempD =0;
+u16 angle2_tempE =0;
+
+u16 angle4_tempA =0;
+u16 angle4_tempB =0;
+u16 angle4_tempC =0;
+u16 angle4_tempD =0;
+u16 angle4_tempE =0;
+
+
+u16 tmp_value =0;
+u16 safe_word =0;
+unsigned char crc_ret = 0;
+
+int angle_Binpeng =0;
+int angle2_Binpeng =0;
+int angle3_Binpeng =0;
+int angle4_Binpeng =0;
+
+
+u8 tmp_buf[]={0x00,0x00,0x00,0x00};
+
+
+//u16 ReadTempA =0;
+//u16 ReadTempB =0;
+//u16 ReadTempC =0;
+//u16 ReadTempAA =0;
+//u16 ReadTempBB =0;
+//u16 ReadTempCC =0;
+
+//int AddNum = 0;
+//int ABSNumNow = 0;
+//int AddTime = 0;
+
+
+
+#define UART_RX_LEN 20
+u8 Uart_Send_Buffer[UART_RX_LEN];
+u8 ii=0;
+u8 Flag_Uart_Send=0;
+
+int fputc(int ch, FILE *f)
+{	
+	Uart_Send_Buffer[ii]=((unsigned char) ch);
+	ii++;
+	return (ch);
+}
+
+int GetKey (void) 
+{ 
+	while (!(USART1->SR & USART_FLAG_RXNE));
+	return ((int)(USART1->DR & 0x1FF));
+}
+
+#define SIZE sizeof(TEXT_Buffer)	 			  	//数组长度
+#define FLASH_SAVE_ADDR  0X0800F800 				//设置FLASH 保存地址(必须为偶数)
+
+void USART1_Config(int botelv)
+{
+	USART_InitTypeDef USART_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
+
+	GPIO_InitTypeDef GPIO_InitStructure;
+	RCC_APB2PeriphClockCmd( RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1 , ENABLE);
+
+	USART_InitStructure.USART_BaudRate = botelv;//(datatemp[2] + (datatemp[1] << 8))*100;
+	switch(Canshu_Buffer[22])
+	{
+		case 0x00:
+		{
+			USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+			USART_InitStructure.USART_Parity = USART_Parity_No;
+		};break;
+		case 0x01:
+		{
+			USART_InitStructure.USART_WordLength = USART_WordLength_9b;
+			USART_InitStructure.USART_Parity = USART_Parity_Even;
+		};break;
+		case 0x02:
+		{
+			USART_InitStructure.USART_WordLength = USART_WordLength_9b;
+			USART_InitStructure.USART_Parity = USART_Parity_Odd;
+		};break;
+		default:
+		{
+			USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+			USART_InitStructure.USART_Parity = USART_Parity_No;
+		};break;
+	}
+	USART_InitStructure.USART_StopBits = USART_StopBits_1;
+	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+
+	USART_Init(USART1, &USART_InitStructure);         //按上面参数配置USART1
+	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);    //使能接收中断
+	USART_Cmd(USART1, ENABLE);						//使能USART1
+
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;	         //USART1 TX
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;    //复用推挽输出
+	GPIO_Init(GPIOA, &GPIO_InitStructure);		       //A端口 
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;	         //USART1 RX
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;   //复用开漏输入
+	GPIO_Init(GPIOA, &GPIO_InitStructure);		            //A端口 
+
+	/* Configure the NVIC Preemption Priority Bits */  
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_0);	  
+	/* Enable the USART1 Interrupt */
+	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure); 
+
+}
+void Dma_Init(void)
+{
+	DMA_InitTypeDef DMA_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;  
+
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1,ENABLE);
+	/*DMAchannel6configuration*/
+//	DMA_DeInit(DMA1_Channel1);
+	DMA_InitStructure.DMA_PeripheralBaseAddr=(u32)(&USART1->DR);//外设地址
+	DMA_InitStructure.DMA_MemoryBaseAddr=(u32)Uart_Send_Buffer;
+	DMA_InitStructure.DMA_DIR=DMA_DIR_PeripheralDST;//外设作为目的地址//DMA_DIR_PeripheralSRC;//外设作为DMA的源端
+	DMA_InitStructure.DMA_BufferSize=5;//BufferSize;//传输大小
+	DMA_InitStructure.DMA_PeripheralInc=DMA_PeripheralInc_Disable;//外设递增模式禁止DMA_PeripheralInc_Enable;//外设地址增加
+	DMA_InitStructure.DMA_MemoryInc=DMA_MemoryInc_Enable;//内存地址自增
+	DMA_InitStructure.DMA_PeripheralDataSize=DMA_PeripheralDataSize_Byte;//传输方式：字节DMA_PeripheralDataSize_Word;//字（32位）
+	DMA_InitStructure.DMA_MemoryDataSize=DMA_PeripheralDataSize_Byte;//内存存储方式：字节DMA_MemoryDataSize_Word;
+	DMA_InitStructure.DMA_Mode=DMA_Mode_Normal;//DMA_Mode_Normal正常模式，只传送一次;DMA_Mode_Circular:循环模式，不停的传送;
+	DMA_InitStructure.DMA_Priority=DMA_Priority_High;
+	DMA_InitStructure.DMA_M2M=DMA_M2M_Disable;//DMA_M2M_Enable;
+	DMA_Init(DMA1_Channel4,&DMA_InitStructure);
+
+	/*EnableDMAChannel4TransferCompleteinterrupt*/
+	DMA_ITConfig(DMA1_Channel4,DMA_IT_TC,ENABLE);
+	//
+	//USART_DMACmd(USART1,USART_DMAReq_Rx,ENABLE);//串口接收器DMA
+	//采用DMA方式发送
+	USART_DMACmd(USART1,USART_DMAReq_Tx,ENABLE);
+	//启动串口
+	USART_Cmd(USART1,ENABLE);
+	DMA_Cmd(DMA1_Channel4, ENABLE);
+
+	
+	//传输完成则进入DMA1_Channel4中断；
+
+         
+        
+	 //DMA优先级        
+	 NVIC_PriorityGroupConfig(NVIC_PriorityGroup_3);
+	 NVIC_InitStructure.NVIC_IRQChannel= DMA1_Channel4_IRQn; 
+	 NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority= 2; 
+	 NVIC_InitStructure.NVIC_IRQChannelSubPriority= 1; 
+	 NVIC_InitStructure.NVIC_IRQChannelCmd= ENABLE; 
+	 NVIC_Init(&NVIC_InitStructure);
+}
+
+//串口1  DMA方式发送中断
+void DMA1_Channel4_IRQHandler(void)
+{
+	DMA_ClearFlag(DMA1_FLAG_TC4);//清除标志位 
+	DMA_Cmd(DMA1_Channel4,DISABLE);//关闭DMA 
+  RESET_RE;                   
+}
+/*************************校验码计算函数*************************/
+unsigned int Crc_Count(unsigned char pbuf[],unsigned char num)
+{
+   int i,j;
+   unsigned int wcrc=0xffff;
+   for(i=0;i<num;i++)
+   {
+     wcrc^=(unsigned int)(pbuf[i]);
+	 for (j=0;j<8;j++)
+	 {
+	    if(wcrc&0x0001)
+		{
+		   wcrc>>=1;
+		   wcrc^=0xa001;
+		}
+		else
+			wcrc>>=1;
+	 }
+   }   
+   return wcrc;
+}
+u8 Datasend_Flag1 = 0;
+u8 Dataset_Flag1 = 0;
+u8 baudset_Flag1 = 0;
+u8 Datasend_Num = 0;
+int UartSend_delay = 0;
+/**********************************延时发送函数************************************************************/
+void USART_Transmit_Delay(USART_TypeDef* USARTx,u8 *data,int num)	 //发送数组
+{
+	while(num--)
+	{
+		while(USART_GetFlagStatus(USARTx,USART_FLAG_TXE)==RESET);//发送寄存器空
+		USART_SendData(USARTx,*data++);//发送单个数据//USART1->DR=*data++;
+		while(USART_GetFlagStatus(USARTx,USART_FLAG_TC)==RESET);//等待数据帧发送完毕
+	}
+}
+/**********************************发送函数************************************************************/
+void USART_Transmit(USART_TypeDef* USARTx,u8 *data,int num)	 //发送数组
+{
+	Datasend_Flag1 = 1;
+	Datasend_Num = num;
+	TIM4->CNT=0;
+	TIM_Cmd(TIM4, ENABLE);
+}
+void USART_Transmit1(USART_TypeDef* USARTx,u8 data)//发送一个字节
+{ 
+   while(USART_GetFlagStatus(USARTx,USART_FLAG_TXE)==RESET);//发送寄存器空
+	 USART_SendData(USARTx,data);//发送单个数据//USART1->DR=*data++;
+	 while(USART_GetFlagStatus(USARTx,USART_FLAG_TC)==RESET);//等待数据帧发送完毕
+}
+
+int DRVdata = 0;
+int DRVdata_temp = 0;
+void USART1_IRQHandler(void)
+{
+	  
+	unsigned short int cr1;
+	unsigned short int cr13;
+//	TestNumA++;
+  if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)
+	{
+				
+		ReceiveData = USART_ReceiveData(USART1);
+		
+		for(USART1_i=0;USART1_i<12;USART1_i++){ReceiveData_All_13[USART1_i]=ReceiveData_All_13[USART1_i+1];}
+		ReceiveData_All_13[12]=ReceiveData;
+		cr13=Crc_Count(ReceiveData_All_13,11); //计算出波特率的校验码
+		
+		for(USART1_i=0;USART1_i<12;USART1_i++){ReceiveData_All[USART1_i]=ReceiveData_All_13[USART1_i+5];}
+		
+		cr1=Crc_Count(ReceiveData_All,6); //计算出校验码
+
+//			cr1=Crc_Count(ReceiveData_All,6); //计算出校验码
+			
+			if(cr1==(ReceiveData_All[6]+(ReceiveData_All[7]<<8)))
+			{				
+				if(ReceiveData_All[0]==Canshu_Buffer[4])//判断地址码是否正确
+				{
+					switch(ReceiveData_All[1])//判断功能码
+					{
+						case 0x03://读相关寄存器参数
+						{
+							switch(ReceiveData_All[3]+(ReceiveData_All[2]<<8))//判断寄存器地址
+							{
+								case 0x0000://读取编码器值
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=ABSNumOK_Last>>8;
+										SendData_All[4]=ABSNumOK_Last;
+										
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										
+									}
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+//										Uart_Send_Buffer[0]=Canshu_Buffer[4];
+//										Uart_Send_Buffer[1]=0x03;
+//										Uart_Send_Buffer[2]=0x04;
+//										Uart_Send_Buffer[3]=ABSNumOK_Last>>24;
+//										Uart_Send_Buffer[4]=ABSNumOK_Last>>16;
+//										Uart_Send_Buffer[5]=ABSNumOK_Last>>8;
+//										Uart_Send_Buffer[6]=ABSNumOK_Last;
+//										
+//										cr1=Crc_Count(Uart_Send_Buffer,7); 
+//										Uart_Send_Buffer[7]=cr1;
+//										Uart_Send_Buffer[8]=cr1>>8;
+//									
+//										SET_RE;	
+//										TIM2->CNT = 0;
+//										DMA_SetCurrDataCounter(DMA1_Channel4,11);
+//										DMA_Cmd(DMA1_Channel4,ENABLE);
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x04;
+										SendData_All[3]=ABSNumOK_Last>>24;
+										SendData_All[4]=ABSNumOK_Last>>16;
+										SendData_All[5]=ABSNumOK_Last>>8;
+										SendData_All[6]=ABSNumOK_Last;
+										
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										
+									}
+								};break;
+								case 0x0001://读取编码器值高两个字节
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=ABSNumOK_Last>>24;
+										SendData_All[4]=ABSNumOK_Last>>16;
+										
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										
+									}
+								};break;
+								case 0x0002://读取编码器圈数值或者单圈数值
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=(ABSNumOK_Last/danquan)>>8;
+										SendData_All[4]=(ABSNumOK_Last/danquan);
+										
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										
+									}
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x04;
+										SendData_All[3]=(ABSNumOK_Last/danquan)>>8;
+										SendData_All[4]=(ABSNumOK_Last/danquan);
+										SendData_All[5]=(ABSNumOK_Last%danquan)>>8;
+										SendData_All[6]=(ABSNumOK_Last%danquan);
+										
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										
+									}
+								};break;
+								case 0x0003://读取编码器单圈数值
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==1)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x02;
+										SendData_All[3]=(ABSNumOK_Last%danquan)>>8;
+										SendData_All[4]=(ABSNumOK_Last%danquan);
+										
+										cr1=Crc_Count(SendData_All,5); 
+										SendData_All[5]=cr1;
+										SendData_All[6]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,7);
+										
+									}
+								};break;
+								
+								
+								case 0x0088://查询编码器参数
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x88;
+										SendData_All[3]=quansu_max;
+										SendData_All[4]=(Canshu_Buffer[6])|(((quansu_max>>8))<<4);
+										SendData_All[5]=(Canshu_Buffer[13])|(((quansu_max>>8)&0xf0));
+										SendData_All[6]=Canshu_Buffer[9];
+										
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										
+									}
+								};break;
+								
+								case 0x00AA://读取芯片的真值，做校零处理
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8))==2)//判断读取字节数
+									{
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x03;
+										SendData_All[2]=0x04;
+										SendData_All[3]=angle_tempC;
+										SendData_All[4]=angle2_tempC;
+										SendData_All[5]=angle3_tempC;
+										SendData_All[6]=angle4_tempC;
+										
+										cr1=Crc_Count(SendData_All,7); 
+										SendData_All[7]=cr1;
+										SendData_All[8]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,9);
+										
+									}
+								};break;
+
+								default:break;
+							}
+						};break;
+							
+						case 0x06://写相关寄存器参数
+						{
+							switch(ReceiveData_All[3]+(ReceiveData_All[2]<<8))//判断寄存器地址
+							{
+								case 0x0004://设定编码器地址
+								{
+									Canshu_Buffer[4] = ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+							
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x04;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+
+									Dataset_Flag1 = 1;									
+								};break;
+								case 0x0005://设定编码器波特率
+								{
+									Canshu_Buffer[5] = ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x05;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									Dataset_Flag1 = 1;
+									baudset_Flag1 = 1;
+	
+									
+									
+								};break;
+								
+								
+								case 0x0006://设定编码器模式
+								{
+									Canshu_Buffer[6] = ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+
+									
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x06;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									Dataset_Flag1 = 1;
+									
+								};break;
+								case 0x0007://设定编码器自动返回时间
+								{
+									Canshu_Buffer[20] = ReceiveData_All[4];
+									Canshu_Buffer[21] = ReceiveData_All[5];
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+							
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x07;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+									
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									Dataset_Flag1 = 1;
+								};break;
+								case 0x0008://设定编码器零点
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8)) == 1)
+									{
+										DRVdata_temp = 0;
+										if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+										if(DRVdata_temp <= 0) DRVdata_temp = 0;
+										DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+										
+										if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+										else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+			
+										else{DRVdata = DRVdata;}
+										
+										Canshu_Buffer[16] = DRVdata >> 24;
+										Canshu_Buffer[17] = DRVdata >> 16;
+										Canshu_Buffer[18] = DRVdata >> 8;
+										Canshu_Buffer[19] = DRVdata;
+
+
+										cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+										Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x08;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										Dataset_Flag1 = 1;	
+									}
+								};break;
+								case 0x000D://设定编码器零点
+								{
+									if((ReceiveData_All[5]+(ReceiveData_All[4]<<8)) == 1)
+									{
+										
+										DRVdata_temp = 0;
+										if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+										if(DRVdata_temp <= 0) DRVdata_temp = 0;
+										DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+										
+										if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+										else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+			
+										else{DRVdata = DRVdata;}
+										
+										Canshu_Buffer[16] = DRVdata >> 24;
+										Canshu_Buffer[17] = DRVdata >> 16;
+										Canshu_Buffer[18] = DRVdata >> 8;
+										Canshu_Buffer[19] = DRVdata;
+
+										cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+										Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x0D;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										Dataset_Flag1 = 1;	
+									}
+								};break;
+								case 0x0009://编码器值递增方向
+								{
+										Canshu_Buffer[13]=ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+
+										cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+										Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x09;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										Dataset_Flag1 = 1;	
+								};break;
+								case 0x000B://设置编码器当前值（高16位）
+								{
+									DRVdata_temp = ReceiveData_All_13[5] + (ReceiveData_All_13[4]<<8);
+									if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+									DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+									
+									if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+									else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+		
+									else{DRVdata = DRVdata;}
+									
+//									Canshu_Buffer[16] = DRVdata >> 24;
+//									Canshu_Buffer[17] = DRVdata >> 16;
+									Canshu_Buffer[16] = DRVdata >> 8;
+									Canshu_Buffer[17] = DRVdata;
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+									
+									
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x0B;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									Dataset_Flag1 = 1;	
+								};break;
+								case 0x000C://设置编码器当前值（低16位）
+								{
+									DRVdata_temp = ReceiveData_All_13[5] + (ReceiveData_All_13[4]<<8);
+									if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+									DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+									
+									if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+									else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+		
+									else{DRVdata = DRVdata;}
+									
+//									Canshu_Buffer[16] = DRVdata >> 24;
+//									Canshu_Buffer[17] = DRVdata >> 16;
+									Canshu_Buffer[18] = DRVdata >> 8;
+									Canshu_Buffer[19] = DRVdata;
+									
+									
+									
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+									
+									
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x0C;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									Dataset_Flag1 = 1;
+								};break;
+								case 0x000E://设定编码器值中值
+								{
+									DRVdata_temp = ABSNumOK_Last_Max/2;
+									if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+									if(DRVdata_temp <= 0) DRVdata_temp = 0;
+									DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+									
+									if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+									else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+		
+									else{DRVdata = DRVdata;}
+									
+									Canshu_Buffer[16] = DRVdata >> 24;
+									Canshu_Buffer[17] = DRVdata >> 16;
+									Canshu_Buffer[18] = DRVdata >> 8;
+									Canshu_Buffer[19] = DRVdata;
+
+										cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+										Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+					
+										
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x0E;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										Dataset_Flag1 = 1;	
+								};break;
+								case 0x0010://设定编码器奇偶校验码
+								{
+									Canshu_Buffer[22] = ReceiveData_All[5]+(ReceiveData_All[4]<<8);
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x06;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x10;
+									SendData_All[4]=ReceiveData_All[4];
+									SendData_All[5]=ReceiveData_All[5];
+
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									Dataset_Flag1 = 1;
+									baudset_Flag1 = 1;
+	
+								};break;
+								case 0x000F://设定编码器值5圈值
+								{
+
+									DRVdata_temp = 5*danquan;
+									if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+									if(DRVdata_temp <= 0) DRVdata_temp = 0;
+									DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+									
+									if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+									else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+		
+									else{DRVdata = DRVdata;}
+									
+									Canshu_Buffer[16] = DRVdata >> 24;
+									Canshu_Buffer[17] = DRVdata >> 16;
+									Canshu_Buffer[18] = DRVdata >> 8;
+									Canshu_Buffer[19] = DRVdata;
+									
+
+										cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+										Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+							
+										
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x0F;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										Dataset_Flag1 = 1;	
+								};break;
+								
+								
+								
+								case 0x0068://编码器精度调整
+								{
+										Canshu_Buffer[9]=ReceiveData_All[5]+(ReceiveData_All[4]<<8)+10;
+										if(Canshu_Buffer[9] == 11)Canshu_Buffer[9] =12;
+									
+										jindu = 12 - Canshu_Buffer[9];
+										if(jindu < 0)jindu = 0;
+										ABSNumOK_Last_Max = ENCODER_MAX >> jindu;
+										danquan = 4096 >> jindu;
+
+										cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+										Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+										Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+										SendData_All[0]=Canshu_Buffer[4];
+										SendData_All[1]=0x06;
+										SendData_All[2]=0x00;
+										SendData_All[3]=0x68;
+										SendData_All[4]=ReceiveData_All[4];
+										SendData_All[5]=ReceiveData_All[5];
+										
+										cr1=Crc_Count(SendData_All,6); 
+										SendData_All[6]=cr1;
+										SendData_All[7]=cr1>>8;
+										USART_Transmit(USART1,SendData_All,8);
+										Dataset_Flag1 = 1;
+								};break;
+								
+								default:break;
+							}
+						};break;
+						
+						default:break;
+					}
+				}
+			}
+			
+			//设置编码器当前值
+			if(cr13==(ReceiveData_All_13[11]+(ReceiveData_All_13[12]<<8)))
+			{				
+				if(ReceiveData_All_13[0]==Canshu_Buffer[4])//判断地址码是否正确
+				{						
+						if(ReceiveData_All_13[1] == 0x10)
+						{									
+								if((ReceiveData_All_13[3]+(ReceiveData_All_13[2]<<8))== 0x000B)
+								{
+									DRVdata_temp = ReceiveData_All_13[10] + (ReceiveData_All_13[9]<<8) 
+													+ (ReceiveData_All_13[8]<<16) + (ReceiveData_All_13[7]<<24);
+									if(DRVdata_temp >= ABSNumOK_Last_Max) DRVdata_temp = ABSNumOK_Last_Max - 1;
+									if(DRVdata_temp <= 0) DRVdata_temp = 0;
+									DRVdata = DRVdata_temp - ABSNumOK_Last + DRVdata;
+									
+									if(DRVdata >= ABSNumOK_Last_Max){DRVdata = DRVdata - ABSNumOK_Last_Max;}	
+									else if(DRVdata < 0){DRVdata = DRVdata + ABSNumOK_Last_Max;}		
+		
+									else{DRVdata = DRVdata;}
+									
+									Canshu_Buffer[16] = DRVdata >> 24;
+									Canshu_Buffer[17] = DRVdata >> 16;
+									Canshu_Buffer[18] = DRVdata >> 8;
+									Canshu_Buffer[19] = DRVdata;
+									
+									
+
+									cr2=Crc_Count(Canshu_Buffer,24); //计算出校验码
+									Canshu_Buffer[24] = cr2;//所有存储数据校验CRC高字节
+									Canshu_Buffer[25] = cr2>>8;//所有存储数据校验CRC低字节
+
+																		
+									SendData_All[0]=Canshu_Buffer[4];
+									SendData_All[1]=0x10;
+									SendData_All[2]=0x00;
+									SendData_All[3]=0x0B;
+									SendData_All[4]=0x00;
+									SendData_All[5]=0x02;
+
+									cr1=Crc_Count(SendData_All,6); 
+									SendData_All[6]=cr1;
+									SendData_All[7]=cr1>>8;
+									USART_Transmit(USART1,SendData_All,8);
+									Dataset_Flag1 = 1;
+
+								}
+							}
+						}
+					}
+			
+			
+			
+		USART_ClearFlag(USART1,USART_FLAG_RXNE);
+  }
+	
+	if(USART_GetFlagStatus(USART1, USART_FLAG_ORE) != RESET)
+	{ 
+		ReceiveData = USART_ReceiveData(USART1); 
+		USART_ClearFlag(USART1, USART_FLAG_ORE);
+	}
+
+	if(USART_GetFlagStatus(USART1, USART_FLAG_NE) != RESET)USART_ClearFlag(USART1, USART_FLAG_NE);
+	if(USART_GetFlagStatus(USART1, USART_FLAG_FE) != RESET)USART_ClearFlag(USART1, USART_FLAG_FE);
+	if(USART_GetFlagStatus(USART1, USART_FLAG_PE) != RESET)USART_ClearFlag(USART1, USART_FLAG_PE);
+
+}
+
+
+unsigned char crc8_operation(unsigned char *data, unsigned char len)
+{
+    unsigned char crc = 0;
+    unsigned char byte_idx = 0;
+		unsigned char bit_idx = 0;
+
+    crc = 0xFF;
+
+    for(byte_idx = 0; byte_idx < len; byte_idx ++)
+    {
+        crc ^= data[byte_idx];
+
+        for(bit_idx = 0; bit_idx < 8; bit_idx ++)
+        {
+            if((crc & 0x80) != 0){crc <<= 1;crc ^= 0x1D;}
+            
+            else{crc <<= 1;}
+        }
+    }
+    return(~crc);
+}
+
+
+//#endif 
+
+
+
+
+
