@@ -1,6 +1,6 @@
 
 # ROBOCON2024-PPS
-Plane Positioning System (Code Disk) Using Magnetic Encoding + Omni Wheels
+Plane Positioning System (Code Disk) Using Magnetic Encoding + Omni Wheels![IMG_20251211_222307](./README.assets/IMG_20251211_222307.jpg)
 
 ## 📍 Project Introduction
 
